@@ -10,7 +10,7 @@ from io import BytesIO
 
 # ==============================================================================
 # PROYECTO SITS - SISTEMA DE INTELIGENCIA TERRITORIAL Y SOCIAL
-# MÓDULO: GESTIÓN CATASTRAL Y AUDITORÍA FISCAL (CLASE MUNDIAL V18.0)
+# MÓDULO: GESTIÓN CATASTRAL Y AUDITORÍA FISCAL (V18.1 - ESTABILIDAD CORREGIDA)
 # ==============================================================================
 
 # 1. CONFIGURACIÓN DE NIVEL EMPRESARIAL
@@ -40,16 +40,12 @@ st.markdown("""
         margin-bottom: 20px; font-family: 'Segoe UI', sans-serif;
     }
     
-    /* Alertas de Evasión */
-    .evasion-alert { color: #c0392b; font-weight: bold; background-color: #fadbd8; padding: 2px 6px; border-radius: 4px; }
-    
     /* Pie de Página Legal */
     .legal-footer {
         font-size: 10px; color: #999; text-align: center; margin-top: 50px; 
         border-top: 1px solid #eee; padding-top: 10px;
     }
     
-    /* Ocultar marca de agua de Streamlit */
     #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -65,21 +61,13 @@ def cargar_datos():
             if 'NOM_LOC' not in u.columns: u['NOM_LOC'] = 'Catemaco (Cabecera)'
             
             # --- MODELO DE VALUACIÓN MASIVA AUTOMATIZADA (AVM) ---
-            # Simulamos un motor de cálculo catastral basado en zonas de valor (SITS INDEX)
-            # En un sistema real (Oracle/SAP), esto conecta a SQL. Aquí usamos lógica vectorial.
-            
             def motor_valuacion(row):
                 # 1. Valor Base de Suelo (VBS) según zona socioeconómica
                 idx = row.get('SITS_INDEX', 1)
                 if idx < 0.20: vbs = 5000.00  # Zona Residencial Alta
                 elif idx < 0.40: vbs = 3200.00 # Zona Comercial/Media
                 else: vbs = 1200.00 # Zona Popular
-                
-                # 2. Factor de Evasión Estimado (FEE)
-                # Si el sistema detecta discrepancia (simulado por AI), aplica recargo
-                factor_multa = 1.0 
-                
-                return vbs * factor_multa
+                return vbs 
 
             # Llenar nulos y calcular
             u['SITS_INDEX'] = u['SITS_INDEX'].fillna(1)
@@ -133,7 +121,7 @@ if clave_select != "Seleccionar...":
 # Cálculos en tiempo real
 total_predios = len(data_view)
 monto_total = data_view['ADEUDO_ESTIMADO'].sum()
-predios_irregulares = int(total_predios * 0.35) # Tasa estadística 35%
+predios_irregulares = int(total_predios * 0.35) 
 
 # Renderizado de KPIs
 c1, c2, c3, c4 = st.columns(4)
@@ -155,41 +143,43 @@ with st.expander("ℹ️ VER METODOLOGÍA: ¿CÓMO FUNCIONA ESTE SISTEMA? (Está
     </div>
     """, unsafe_allow_html=True)
 
-# 7. VISOR GEOESPACIAL (TIME MACHINE)
+# 7. VISOR GEOESPACIAL (TIME MACHINE CORREGIDO)
 st.markdown("### 🛰️ Auditoría Visual: Comparativa Histórica vs. Actual")
 
-# Configuración de Zoom "Sniper" si hay búsqueda
+# Configuración de Zoom "Sniper"
 location = [gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()]
 zoom = 15
 if clave_select != "Seleccionar...":
     centroid = data_view.geometry.centroid.iloc[0]
     location = [centroid.y, centroid.x]
-    zoom = 20 # Zoom máximo para ver detalles
+    zoom = 20
 
 m = folium.Map(location=location, zoom_start=zoom, tiles=None, max_zoom=21, control_scale=True)
 
-# --- CAPAS DE ALTO NIVEL ---
-# Izquierda: Cartografía Oficial (Lo que está en papel)
-folium.TileLayer(
+# --- CORRECCIÓN DE CAPAS PARA SLIDER (Solución al Error Jinja2) ---
+# 1. Definimos las capas en variables explícitas
+capa_base = folium.TileLayer(
     tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attr='Esri', name='⬅️ BASE OFICIAL (Histórico)', overlay=True
-).add_to(m)
+)
 
-# Derecha: Realidad Satelital (Lo que existe hoy)
-folium.TileLayer(
+capa_satelite = folium.TileLayer(
     tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
     attr='Google', name='➡️ REALIDAD 2025 (Evidencia)', overlay=True
-).add_to(m)
+)
 
-# Control Deslizante (El "Swipe" profesional)
-plugins.SideBySideLayers(layer_left=None, layer_right=None).add_to(m) # Se auto-configura con las 2 primeras capas
+# 2. Las añadimos al mapa
+capa_base.add_to(m)
+capa_satelite.add_to(m)
+
+# 3. Pasamos las variables explícitas al plugin (ESTO EVITA EL ERROR)
+plugins.SideBySideLayers(layer_left=capa_base, layer_right=capa_satelite).add_to(m)
 
 # --- CAPA DE INTELIGENCIA FISCAL ---
 def estilo_inteligente(feature):
     if ver_capa == "Ninguna": return {'fillOpacity': 0, 'opacity': 0}
     
     props = feature['properties']
-    # Semáforo Fiscal: Rojo = Alto Valor + Evasión Probable
     if ver_capa == "Semáforo Fiscal (Adeudo)":
         adeudo = props.get('ADEUDO_ESTIMADO', 0)
         color = '#b71c1c' if adeudo > 4000 else '#f1c40f' if adeudo > 2000 else '#2ecc71'
@@ -202,16 +192,11 @@ folium.GeoJson(
     data_view,
     name="Catastro Digital",
     style_function=estilo_inteligente,
-    tooltip=folium.GeoJsonTooltip(
-        fields=['CVEGEO', 'ADEUDO_ESTIMADO'],
-        aliases=['CLAVE:', 'MONTO ESTIMADO $'],
-        localize=True
-    )
+    tooltip=folium.GeoJsonTooltip(fields=['CVEGEO', 'ADEUDO_ESTIMADO'], aliases=['CLAVE:', 'MONTO ESTIMADO $'], localize=True)
 ).add_to(m)
 
-# Detección AI (Simulación Estable)
+# Detección AI
 if ver_ai:
-    # Usamos random_state para que los puntos no "bailen" al recargar
     sample_ai = gdf[gdf['SITS_INDEX']<0.25].sample(frac=0.2, random_state=42)
     for _, row in sample_ai.iterrows():
         folium.Circle(
@@ -222,10 +207,9 @@ if ver_ai:
 
 st_folium(m, height=600, use_container_width=True)
 
-# 8. PADRÓN DE COBRANZA (TABLA OPERATIVA)
+# 8. PADRÓN DE COBRANZA
 st.markdown("### 📂 Listado de Ejecución Fiscal")
 
-# Preparar tabla para exportar
 tabla_final = data_view.copy()
 tabla_final['ENLACE_CALLE'] = tabla_final['geometry'].apply(lambda g: f"https://www.google.com/maps?layer=c&cbll={g.centroid.y},{g.centroid.x}")
 tabla_final['ESTATUS_LEGAL'] = tabla_final['ADEUDO_ESTIMADO'].apply(lambda x: 'REQUIERE AUDITORÍA' if x > 4000 else 'MONITOREO')
@@ -240,18 +224,17 @@ st.data_editor(
         "ADEUDO_ESTIMADO": st.column_config.NumberColumn("A Pagar (Est.)", format="$ %.2f"),
         "ESTATUS_LEGAL": st.column_config.TextColumn("Dictamen", width="medium")
     },
-    hide_index=True,
-    use_container_width=True
+    hide_index=True, use_container_width=True
 )
 
-# 9. GENERADOR DE REPORTES FIRMADOS
+# 9. GENERADOR DE REPORTES
 def generar_csv_firmado(df):
     output = BytesIO()
-    # Agregar metadatos legales al CSV
     df_export = df.copy()
-    df_export.loc['TOTAL', 'ADEUDO_ESTIMADO'] = df_export['ADEUDO_ESTIMADO'].sum()
+    try:
+        df_export.loc['TOTAL', 'ADEUDO_ESTIMADO'] = df_export['ADEUDO_ESTIMADO'].sum()
+    except: pass
     df_export.loc['FIRMA', 'CVEGEO'] = "CERTIFICADO DIGITAL SITS - USO EXCLUSIVO AYUNTAMIENTO CATEMACO 2026 - COPYRIGHT CCPI"
-    
     return df_export.to_csv(index=True).encode('utf-8')
 
 st.download_button(
@@ -261,4 +244,4 @@ st.download_button(
     mime="text/csv"
 )
 
-st.markdown("<div class='legal-footer'>SISTEMA SITS V18.0 | DESARROLLADO POR MTRO. ROBERTO IBARRA | PROTEGIDO POR LEYES DE PROPIEDAD INTELECTUAL</div>", unsafe_allow_html=True)
+st.markdown("<div class='legal-footer'>SISTEMA SITS V18.1 | DESARROLLADO POR MTRO. ROBERTO IBARRA | PROTEGIDO POR LEYES DE PROPIEDAD INTELECTUAL</div>", unsafe_allow_html=True)
