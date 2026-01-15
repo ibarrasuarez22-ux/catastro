@@ -1,0 +1,13 @@
+streamlit
+geopandas
+pandas
+numpy
+folium
+streamlit-folium
+plotly
+mapclassify
+rtree
+# Librerías base para sistemas geográficos
+fiona
+shapely
+pyproj
