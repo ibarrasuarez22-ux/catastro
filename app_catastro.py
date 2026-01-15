@@ -34,11 +34,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. CARGA DE DATOS (SOLO LO NECESARIO)
+# 3. CARGA DE DATOS (CORREGIDO PARA LEER EN RAÍZ)
 @st.cache_data
 def cargar_datos():
-    f_urb = "output/sits_capa_urbana.geojson"
-    # Cargamos solo urbano porque el catastro fiscal es prioridad urbana
+    # CAMBIO IMPORTANTE: Quitamos "output/" porque los archivos están sueltos
+    f_urb = "sits_capa_urbana.geojson" 
+    
     if os.path.exists(f_urb):
         u = gpd.read_file(f_urb)
         u['TIPO'] = 'Urbano'
@@ -47,16 +48,10 @@ def cargar_datos():
         # Limpieza para evitar errores matemáticos
         cols_fill = ['SITS_INDEX', 'CAR_POBREZA_20', 'CAR_VIV_20', 'CAR_SERV_20', 'IND_RESILIENCIA_HIDRICA', 'DICTAMEN_VIABILIDAD']
         for c in cols_fill:
-            if c not in u.columns: u[c] = 0 # Blindaje si falta columna
+            if c not in u.columns: u[c] = 0 
             else: u[c] = u[c].fillna(0)
         return u
     return None
-
-gdf_u = cargar_datos()
-
-if gdf_u is None:
-    st.error("🚨 ERROR: No se encuentra 'output/sits_capa_urbana.geojson'. Suba los datos al repositorio.")
-    st.stop()
 
 # 4. BARRA LATERAL (FILTROS SIMPLIFICADOS)
 with st.sidebar:
